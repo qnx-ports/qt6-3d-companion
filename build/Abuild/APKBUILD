@@ -1,0 +1,88 @@
+# Alpine-Maintainer: Bart Ribbers <bribbers@disroot.org>
+# Maintainer: Felix Xing <fxing@qnx.com>
+pkgname=qt6-3d
+pkgver=6.10.0
+pkgrel=0
+pkgdesc="C++ and QML APIs for easy inclusion of 3D graphics"
+url="https://qt.io/"
+arch="all"
+license="LGPL-2.1-only AND LGPL-3.0-only AND GPL-3.0-only AND Qt-GPL-exception-1.0"
+depends="assimp-libs
+        libc++
+        libxkbcommon
+        qt6-base
+        qt6-declarative
+        qt6-multimedia
+        qt6-shadertools
+        zlib
+        qnx-egl
+        qnx-gles
+        qnx-io-sock"
+depends_dev="qt6-base-dev
+            qt6-base-private-dev
+            qt6-declarative-dev
+            qt6-multimedia-dev
+            qt6-shadertools-dev
+            "
+makedepends="$depends_dev
+    assimp-dev
+    cmake
+    perl
+    qt6-declarative-private-dev
+    ninja
+    zlib-dev
+    "
+
+subpackages="$pkgname-dev"
+options="!check" # No tests
+builddir="$srcdir/qt3d-everywhere-src-${pkgver/_/-}"
+source="https://download.qt.io/official_releases/qt/${pkgver%.*}/${pkgver/_/-}/submodules/qt3d-everywhere-src-${pkgver/_/-}.tar.xz"
+
+build() {
+    # It's qcc here, but compiled with clang on the selfhosted system
+    if [[ $CARCH == "x86_64" ]]; then
+        _triplet="qnx-x86-64-qcc"
+    elif [[ $CARCH == "aarch64" ]]; then
+        _triplet="qnx-aarch64le-qcc"
+    else
+        die "$CARCH not supported"
+    fi
+
+    # Clang does not support fortify source on QNX
+    _extra_flags="-U_FORTIFY_SOURCE"
+    _warn="-Wno-character-conversion"
+
+    export CC=clang
+    export CXX=clang++
+    export CFLAGS="$_extra_flags $_warn"
+    export CXXFLAGS="$_extra_flags $_warn"
+    export LDFLAGS="-lsocket"
+    export LD_LIBRARY_PATH="$builddir/build/lib:$LD_LIBRARY_PATH"
+
+    cmake -B build -G Ninja \
+        -DCMAKE_SKIP_RPATH=ON \
+        -DQT_QMAKE_TARGET_MKSPEC=$_triplet \
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_MESSAGE_LOG_LEVEL=STATUS \
+        -DFEATURE_pkg_config=ON \
+        -DINPUT_assimp=system \
+        -DTEST_assimp=ON
+
+    cmake --build build --parallel
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install build
+}
+
+dev() {
+    default_dev
+
+    amove usr/lib/qt6/sbom
+}
+
+sha512sums="
+8c7d7f7c1975c05024fe5a5672840d10fecae84cd057c44d00815a13f75f1aa3647b4b1963f4a906a2a8269bb38bc2c62a1c23b6165f6004313d911f46fd7b20  qt3d-everywhere-src-6.10.0.tar.xz
+"
